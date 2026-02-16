@@ -3,6 +3,8 @@ from asset import Asset
 import requests
 import os
 
+from main import CROWDSTRIKE_API_URL, NETBOX_API_URL, QUALYS_API_URL
+
 
 class InventorySource:
     name: str = "base"
@@ -32,3 +34,75 @@ class InventorySource:
             results.append(self.normalize(each_record))
 
         return results
+    
+class NetboxInventorySource(InventorySource):
+    name = "netbox"
+
+    def normalize(self, record: dict[str, Any]) -> Asset:
+        # TODO: Map NetBox schema fields based on your preview output.
+        # Suggested schema fields (from your Mockaroo design):
+        # id, device_name, primary_ip, platform, environment, tenant, ...
+        return Asset(
+            asset_id=str(record.get("id")),                 # TODO confirm key
+            hostname=str(record.get("device_name")),        # TODO confirm key
+            ip_address=record.get("primary_ip"),            # TODO confirm key
+            os=record.get("platform"),                      # TODO confirm key
+            environment=record.get("environment"),          # TODO confirm key
+            owner_context=record.get("tenant"),
+            device_status=record.get("status"),
+            location=record.get("site"),
+            first_seen=record.get("first_seen"),
+            last_updated=record.get("last_updated"),
+            source=self.name,                         
+            raw=record,
+        )
+    
+class QualysInventorySource(InventorySource):
+    name = "qualys"
+
+    def normalize(self, record: dict[str, Any]) -> Asset:
+       
+        return Asset(
+            asset_id=str(record.get("asset_id")),           # TODO confirm key
+            hostname=str(record.get("hostname")),           # TODO confirm key
+            ip_address=record.get("ip_address"),            # TODO confirm key
+            os=record.get("operating_system"),              # TODO confirm key
+            environment=record.get("asset_group"),          # TODO map group -> environment
+            owner_context=None,                             # TODO if your schema has owner/team, map it
+            source=self.name,
+            raw=record,
+        )
+    
+class CrowdstrikeInventorySource(InventorySource):
+    name = "crowdstrike"
+
+    def normalize(self, record: dict[str, Any]) -> Asset:
+        # TODO: Map crowdstrike schema fields based on your preview output.
+        # Suggested schema fields:
+        # sensor_id, hostname, local_ip, os_version, logged_in_user, policy_applied, ...
+        return Asset(
+            asset_id=str(record.get("sensor_id")),          # TODO confirm key
+            hostname=str(record.get("hostname")),           # TODO confirm key
+            ip_address=record.get("local_ip"),              # TODO choose local_ip as primary
+            os=record.get("os_version"),                    # TODO confirm key
+            environment=None,                               # TODO if you have env-like field, map it
+            owner_context=record.get("logged_in_user"),     # TODO confirm key
+            source=self.name,
+            raw=record,
+        )
+    
+def quick_test():
+        sources = {
+            "netbox": NetboxInventorySource(NETBOX_API_URL),
+            "qualys": QualysInventorySource(QUALYS_API_URL),
+            "crowdstrike": CrowdstrikeInventorySource(CROWDSTRIKE_API_URL),
+        }
+        for name, src in sources.items():
+            assets = src.fetch_assets()
+            print(f"\n{name}: pulled {len(assets)} assets")
+            # This will grab the first 3 elements out of `assets`. Feel free to change to `[:1]` or `[:2]` or any other number you want to get different quantities of assets
+            for a in assets[:3]:
+                print(" ", a.summary())
+
+if __name__ == "__main__":
+    quick_test()
